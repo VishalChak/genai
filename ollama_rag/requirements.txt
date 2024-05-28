@@ -1,0 +1,8 @@
+chromadb
+langchain_community
+langchain_text_splitters
+sentence-transformers
+openai
+flask
+ollama
+pypdf
