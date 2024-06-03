@@ -1,3 +1,4 @@
+import glob, os
 import uuid
 import chromadb
 from ollama import Client
@@ -14,35 +15,36 @@ from langchain_community.embeddings.sentence_transformer import (
     SentenceTransformerEmbeddings,
 )
 
-loader = PyPDFLoader("2404.pdf")
-pages = loader.load_and_split()
-text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
-docs = text_splitter.split_documents(pages)
-embedding_function = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
-client = chromadb.HttpClient(host='host.docker.internal', port=8000)
-collection = client.get_or_create_collection(name="my_collection")
+model = "phi3"
+embedding_model = "all-MiniLM-L6-v2"
+server = "host.docker.internal"
+collection_name = "my_collection"
 
-for doc in docs:
-    collection.add(
-        ids=[str(uuid.uuid1())], metadatas=doc.metadata, documents=doc.page_content
-    )
+embedding_function = SentenceTransformerEmbeddings(model_name=embedding_model)
+chroma_client = chromadb.HttpClient(host=server, port=8000)
+collection = chroma_client.get_or_create_collection(name=collection_name)
+def load_documents(data_fol):
+    for file_name in glob.glob(os.path.join(data_fol, "*.pdf")):
+        loader = PyPDFLoader(file_name)
+        pages = loader.load_and_split()
+        text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
+        docs = text_splitter.split_documents(pages)
+        for doc in docs:
+            collection.add(ids=[str(uuid.uuid1())], metadatas=doc.metadata, documents=doc.page_content)
 
 
-def Extract_context(query):
-    chroma_client = chromadb.HttpClient(host='host.docker.internal', port=8000,settings=Settings(allow_reset=True))
-    embedding_function = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
+def extract_context(query):
     db = Chroma(
         client=chroma_client,
-        collection_name="my_collection",
-        embedding_function=embedding_function,
-    )
+        collection_name=collection_name,
+        embedding_function=embedding_function, )
     docs = db.similarity_search(query)
     fullcontent =''
     for doc in docs:
         fullcontent ='. '.join([fullcontent,doc.page_content])
 
     return fullcontent
-
+    
 def get_system_message_rag(content):
         return f"""You are an expert consultant helping executive advisors to get relevant information from internal documents.
 
@@ -72,16 +74,16 @@ def get_ques_response_prompt(question):
     Based on the above context, please provide the answer to the following question:
     {question}
     """
-    
+
 def generate_rag_response(content,question):
-    client = Client(host='http://host.docker.internal:11434')
-    stream = client.chat(model='mistral', messages=[
+    client = Client(host=server)
+    stream = client.chat(model=model, messages=[
     {"role": "system", "content": get_system_message_rag(content)},            
     {"role": "user", "content": get_ques_response_prompt(question)}
     ],stream=True)
-    print(get_system_message_rag(content))
-    print(get_ques_response_prompt(question))
-    print("####### THINKING OF ANSWER............ ")
+    # print(get_system_message_rag(content))
+    # print(get_ques_response_prompt(question))
+    # print("####### THINKING OF ANSWER............ ")
     full_answer = ''
     for chunk in stream:
         print(chunk['message']['content'], end='', flush=True)
@@ -89,15 +91,19 @@ def generate_rag_response(content,question):
 
     return full_answer
 
+app = Flask(__name__) 
 @app.route('/query', methods=['POST'])
 def respond_to_query():
     if request.method == 'POST':
         data = request.get_json()
         # Assuming the query is sent as a JSON object with a key named 'query'
         query = data.get('query')
-        # Here you can process the query and generate a response
-        response = f'This is the response to your query:\n {get_reponse(query)}'
+        content = extract_context(query)
+        # print(content)
+        response = f'This is the response to your query from local RAG:\n {generate_rag_response(content , query)}'
         return response
-    
+        # return "Hello"
+
 if __name__ == '__main__':
+    load_documents("data")
     app.run(debug=True, host='0.0.0.0')
