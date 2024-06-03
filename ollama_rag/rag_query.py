@@ -15,7 +15,7 @@ from langchain_community.embeddings.sentence_transformer import (
     SentenceTransformerEmbeddings,
 )
 
-model = "phi3"
+model = "mistral"
 embedding_model = "all-MiniLM-L6-v2"
 server = "host.docker.internal"
 collection_name = "my_collection"

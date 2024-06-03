@@ -8,6 +8,8 @@ docker run -p 8000:8000 chromadb/chroma
 ## 4. build docker image:
     docker build -t rag .
 ## 5. Run docker container.
-    docker run -it -p 5000:5000 rag
+    docker run -it -p 5000:5000 -v <your_path>:/app/data rag
 
 
+## 6. Test 
+     curl -X POST -H "Content-Type: application/json" -d '{"query": "what is NLP"}' http://0.0.0.0:5000/query
